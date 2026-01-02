@@ -2,25 +2,34 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MARK_VII // NEURAL LINK OS</title>
+    <title>MARK_VII // PRECISION OS</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        :root { --glow: #00f2ff; --bg: rgba(0, 15, 25, 0.85); --warn: #ff0055; --active: #00ff9f; }
+        :root { --glow: #00f2ff; --bg: rgba(0, 15, 25, 0.9); --warn: #ff0055; --active: #00ff9f; }
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
+        
+        /* LAYERS */
         #input_video { position: absolute; width: 100vw; height: 100vh; object-fit: cover; z-index: 1; transform: scaleX(-1); }
         #viewport { position: absolute; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
 
-        .hud-panel { position: absolute; background: var(--bg); border-left: 5px solid var(--glow); padding: 15px; color: var(--glow); backdrop-filter: blur(10px); z-index: 100; pointer-events: auto; }
-        .top-left { top: 30px; left: 30px; width: 280px; }
-        .bottom-left { bottom: 30px; left: 30px; width: 320px; height: 140px; }
+        /* HUD STYLING */
+        .hud-panel { position: absolute; background: var(--bg); border-left: 4px solid var(--glow); padding: 15px; color: var(--glow); backdrop-filter: blur(8px); z-index: 100; pointer-events: auto; box-shadow: 0 0 20px rgba(0, 242, 255, 0.15); }
+        .top-left { top: 30px; left: 30px; width: 260px; }
+        .bottom-left { bottom: 30px; left: 30px; width: 320px; }
+        .top-right { top: 30px; right: 30px; width: 200px; text-align: right; border-left: none; border-right: 4px solid var(--active); }
 
-        canvas#graph { width: 100%; height: 60px; background: rgba(0, 242, 255, 0.05); margin-top: 10px; border-bottom: 1px solid var(--glow); }
-        button { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow); padding: 10px; cursor: pointer; width: 100%; text-transform: uppercase; font-family: 'Orbitron'; margin-top: 5px; }
+        /* GRAPH & BARS */
+        canvas#graph { width: 100%; height: 60px; background: rgba(0, 0, 0, 0.3); margin-top: 10px; border: 1px solid rgba(0, 242, 255, 0.3); }
+        .finger-bar { display: flex; align-items: center; margin-top: 4px; font-size: 9px; }
+        .bar-bg { width: 100%; height: 4px; background: #333; margin-left: 10px; position: relative; }
+        .bar-fill { height: 100%; background: var(--active); width: 0%; transition: width 0.1s linear; }
+
+        button { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow); padding: 10px; cursor: pointer; width: 100%; font-family: 'Orbitron'; margin-top: 10px; font-weight: bold; }
         button:hover { background: var(--glow); color: #000; }
-        .telemetry { font-size: 9px; margin-top: 8px; line-height: 1.4; opacity: 0.9; }
+        .relax-btn { border-color: var(--warn); color: var(--warn); }
     </style>
 </head>
 <body>
@@ -29,34 +38,50 @@
 <div id="viewport"></div>
 
 <div class="hud-panel top-left">
-    <div style="font-size: 18px; font-weight: bold; letter-spacing: 2px;">NEURAL_LINK_V7</div>
-    <button id="connectBtn">INITIALIZE PORT</button>
-    <button id="relaxBtn" style="color:var(--warn); border-color:var(--warn)">RELAX SERVOS</button>
-    <div class="telemetry" id="log">> STANDING BY...</div>
+    <div style="font-size: 16px; font-weight: bold; letter-spacing: 2px;">NEURAL LINK V.8</div>
+    <div style="font-size: 10px; margin-top:5px; opacity:0.8;">PRECISION TRACKING MODULE</div>
+    <button id="connectBtn">INITIALIZE SYSTEM</button>
+    <button id="relaxBtn" class="relax-btn">EMERGENCY RELAX</button>
+    <div id="log" style="font-size: 9px; margin-top: 10px; height: 30px; overflow: hidden; color: var(--active);">> WAITING FOR INPUT...</div>
 </div>
 
 <div class="hud-panel bottom-left">
-    <div style="font-size: 10px; letter-spacing: 1px;">NEURAL_SIGNAL_INTENSITY</div>
+    <div style="font-size: 10px; letter-spacing: 1px; margin-bottom: 5px;">NEURAL SIGNAL INTEGRITY</div>
     <canvas id="graph"></canvas>
-    <div id="fingerData" style="font-size: 8px; margin-top: 8px; display: flex; justify-content: space-between; color: var(--active);">
-        <span>CH2: --</span><span>CH3: --</span><span>CH4: --</span><span>CH5: --</span><span>CH6: --</span>
+    <div style="margin-top: 10px;">
+        <div class="finger-bar">THUMB <div class="bar-bg"><div id="f4" class="bar-fill"></div></div></div>
+        <div class="finger-bar">INDEX <div class="bar-bg"><div id="f6" class="bar-fill"></div></div></div>
+        <div class="finger-bar">MIDDLE <div class="bar-bg"><div id="f5" class="bar-fill"></div></div></div>
+        <div class="finger-bar">RING <div class="bar-bg"><div id="f2" class="bar-fill"></div></div></div>
+        <div class="finger-bar">PINKY <div class="bar-bg"><div id="f3" class="bar-fill"></div></div></div>
     </div>
 </div>
 
+<div class="hud-panel top-right">
+    <div style="font-size: 24px; font-weight: bold;" id="fps">60 FPS</div>
+    <div style="font-size: 10px; color: var(--warn);" id="syncStatus">DISCONNECTED</div>
+</div>
+
 <script>
-    const logEl = document.getElementById('log');
-    const graphCanvas = document.getElementById('graph');
-    const gCtx = graphCanvas.getContext('2d');
+    // --- VARIABLES ---
     let serialWriter = null;
     let lastSent = 0;
-    let lastFingerStates = {};
-    let signalData = Array(50).fill(0);
+    let lastFingerVals = {2:0, 3:0, 4:0, 5:0, 6:0}; // Deadzone tracking
+    let signalData = Array(60).fill(0);
+    const graphCanvas = document.getElementById('graph');
+    const gCtx = graphCanvas.getContext('2d');
 
-    // --- 1. HUD GRAPH LOGIC ---
-    function updateGraph(value) {
-        signalData.push(value); signalData.shift();
+    // --- 1. GRAPH ENGINE ---
+    function updateGraph(avgVal) {
+        signalData.push(avgVal); signalData.shift();
         gCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
-        gCtx.strokeStyle = "#00f2ff"; gCtx.lineWidth = 2; gCtx.beginPath();
+        
+        // Grid lines
+        gCtx.strokeStyle = "rgba(0, 242, 255, 0.1)"; gCtx.beginPath();
+        gCtx.moveTo(0, 30); gCtx.lineTo(300, 30); gCtx.stroke();
+
+        // Waveform
+        gCtx.strokeStyle = "#00ff9f"; gCtx.lineWidth = 2; gCtx.beginPath();
         for(let i=0; i<signalData.length; i++) {
             const x = (i / signalData.length) * graphCanvas.width;
             const y = graphCanvas.height - (signalData[i] * graphCanvas.height);
@@ -65,45 +90,50 @@
         gCtx.stroke();
     }
 
-    // --- 2. THREE.JS MESH & JOINT HIGHLIGHTS ---
+    // --- 2. THREE.JS MESH (High-Density & Highlights) ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     renderer.setClearColor(0x000000, 0); renderer.setSize(window.innerWidth, window.innerHeight);
     document.getElementById('viewport').appendChild(renderer.domElement);
 
-    // Surface Mesh
+    // Wireframe Mesh
     const indices = [0,1,5, 1,2,5, 2,3,5, 3,4,5, 5,6,9, 6,7,9, 7,8,9, 9,10,13, 10,11,13, 11,12,13, 13,14,17, 14,15,17, 15,16,17, 17,18,0, 18,19,0, 19,20,0];
     const geometry = new THREE.BufferGeometry();
     const vertices = new Float32Array(21 * 3);
     geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
     geometry.setIndex(indices);
-    const handMesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x00f2ff, wireframe: true, transparent: true, opacity: 0.3 }));
+    const handMesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x00f2ff, wireframe: true, transparent: true, opacity: 0.2 }));
     scene.add(handMesh);
 
-    // ProArm Style Joint Highlights
+    // Joint Spheres (ProArm Style)
     const joints = [];
     for (let i = 0; i < 21; i++) {
-        const s = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ff9f }));
+        const s = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00ff9f }));
         joints.push(s); scene.add(s);
     }
     camera.position.z = 2;
 
-    // --- 3. SERIAL CONTROL ---
+    // --- 3. PRECISION SERIAL LOGIC ---
     document.getElementById('connectBtn').onclick = async () => {
         const port = await navigator.serial.requestPort();
         await port.open({ baudRate: 115200 });
         serialWriter = port.writable.getWriter();
-        logEl.innerHTML = "> LINK ACTIVE<br>" + logEl.innerHTML;
+        document.getElementById('syncStatus').innerText = "ONLINE";
+        document.getElementById('syncStatus').style.color = "#00ff9f";
     };
     document.getElementById('relaxBtn').onclick = () => { if(serialWriter) serialWriter.write(new TextEncoder().encode('R')); };
 
-    async function sendFinger(chan, pulse) {
-        if (serialWriter && lastFingerStates[chan] !== pulse) {
+    async function sendSmartFinger(chan, pulse) {
+        if (!serialWriter) return;
+        
+        // DEADZONE LOGIC: Only send if changed by > 5% (Prevent Jitter)
+        const diff = Math.abs(pulse - lastFingerVals[chan]);
+        if (diff > 10) { 
             const now = Date.now();
-            if (now - lastSent > 45) { // Throttled for speed
+            if (now - lastSent > 30) { // Fast 30ms throttle (ProArm speed)
                 await serialWriter.write(new TextEncoder().encode(`C${chan},${pulse}`));
-                lastFingerStates[chan] = pulse;
+                lastFingerVals[chan] = pulse;
                 lastSent = now;
             }
         }
@@ -116,34 +146,56 @@
     hands.onResults((results) => {
         if (results.multiHandLandmarks) {
             for (const landmarks of results.multiHandLandmarks) {
-                // Mirror and Align
-                const positions = geometry.attributes.position.array;
+                // Update Mesh
+                const pos = geometry.attributes.position.array;
                 landmarks.forEach((p, i) => {
-                    const x = (p.x - 0.5) * -3;
+                    const x = (p.x - 0.5) * -3.5; // Wider mirroring
                     const y = (p.y - 0.5) * -3;
                     const z = p.z * 5;
-                    positions[i * 3] = x; positions[i * 3 + 1] = y; positions[i * 3 + 2] = z;
+                    pos[i*3]=x; pos[i*3+1]=y; pos[i*3+2]=z;
                     joints[i].position.set(x, y, z);
                 });
                 geometry.attributes.position.needsUpdate = true;
 
-                // Individual Finger Mapping
+                // FINGER MATH
                 const wrist = landmarks[0];
-                const fingerTips = [16, 20, 4, 12, 8]; // Channels 2, 3, 4, 5, 6
-                let totalSignal = 0;
+                const tips = [16, 20, 4, 12, 8]; // R, P, T, M, I
+                const chans = [2, 3, 4, 5, 6];
+                let totalFlex = 0;
 
-                fingerTips.forEach((tipIdx, i) => {
+                tips.forEach((tipIdx, i) => {
                     const tip = landmarks[tipIdx];
                     const dist = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
                     
-                    let pulse = 450; 
-                    if (dist < 0.23) pulse = 60; // Close threshold
+                    // PRECISION MAPPING [0.20 closed, 0.40 open]
+                    // We map distance directly to pulse (Analog Control) instead of just Open/Close
+                    let pulse = 450;
+                    let intensity = 0;
 
-                    const chan = i + 2;
-                    sendFinger(chan, pulse);
-                    totalSignal += (1 - dist);
+                    if (dist < 0.20) { pulse = 60; intensity = 100; }
+                    else if (dist > 0.40) { pulse = 450; intensity = 0; }
+                    else {
+                        // Interpolate for smooth range (ProArm "Nice" movement)
+                        const range = 0.40 - 0.20;
+                        const percent = 1 - ((dist - 0.20) / range);
+                        pulse = 450 - (percent * 390); // Map 0-100% to 450-60
+                        intensity = percent * 100;
+                    }
+
+                    // Channel 5 (Middle) has different limits
+                    if (chans[i] === 5) {
+                        pulse = 590 - (intensity/100 * 530);
+                    }
+
+                    // Update UI Bars
+                    document.getElementById(`f${chans[i]}`).style.width = `${intensity}%`;
+                    
+                    // Send to Arm
+                    sendSmartFinger(chans[i], Math.round(pulse));
+                    totalFlex += intensity;
                 });
-                updateGraph(totalSignal / 5);
+
+                updateGraph(totalFlex / 500); // Average 0.0 - 1.0
             }
         }
         renderer.render(scene, camera);
