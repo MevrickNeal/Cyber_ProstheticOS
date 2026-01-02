@@ -7,20 +7,14 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
-
     <style>
-        :root { --glow: #00f2ff; --bg: rgba(0, 15, 25, 0.85); --warn: #ff0055; }
+        :root { --glow: #00f2ff; --bg: rgba(0, 15, 25, 0.85); }
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
-        
-        /* Transparent Layering Fix */
         #input_video { position: absolute; width: 100vw; height: 100vh; object-fit: cover; z-index: 1; transform: scaleX(-1); }
         #viewport { position: absolute; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
-
-        /* Cyberpunk HUD Elements */
         .hud-panel { position: absolute; background: var(--bg); border-left: 5px solid var(--glow); padding: 15px; color: var(--glow); backdrop-filter: blur(10px); z-index: 100; pointer-events: auto; }
         .top-left { top: 30px; left: 30px; width: 280px; }
         .bottom-left { bottom: 30px; left: 30px; width: 300px; height: 130px; border-left: 2px solid var(--glow); }
-
         canvas#graph { width: 100%; height: 60px; margin-top: 10px; background: rgba(0, 242, 255, 0.05); }
         button { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow); padding: 10px; cursor: pointer; width: 100%; text-transform: uppercase; font-family: 'Orbitron'; margin-top: 10px; }
         button:hover { background: var(--glow); color: #000; box-shadow: 0 0 15px var(--glow); }
@@ -28,24 +22,23 @@
     </style>
 </head>
 <body>
+    <video id="input_video" autoplay playsinline></video>
+    <div id="viewport"></div>
 
-<video id="input_video" autoplay playsinline></video>
-<div id="viewport"></div>
-
-<div class="hud-panel top-left">
-    <div style="font-size: 18px; font-weight: bold;">NEURAL_LINK_V7</div>
-    <div style="font-size: 10px;">CORE_SYNC: <span id="sync">OFFLINE</span></div>
-    <button id="connectBtn">INITIALIZE PORT 1420</button>
-    <div class="telemetry" id="log">> STANDING BY...</div>
-</div>
-
-<div class="hud-panel bottom-left">
-    <div style="font-size: 10px;">NEURAL_SIGNAL_INTENSITY</div>
-    <canvas id="graph"></canvas>
-    <div style="font-size: 9px; margin-top: 5px; display: flex; justify-content: space-between;">
-        <span>MIN: 0.15</span><span>LOCK: <span id="lock">0%</span></span><span>MAX: 0.45</span>
+    <div class="hud-panel top-left">
+        <div style="font-size: 18px; font-weight: bold;">NEURAL_LINK_V7</div>
+        <div style="font-size: 10px;">CORE_SYNC: <span id="sync">OFFLINE</span></div>
+        <button id="connectBtn">INITIALIZE PORT 1420</button>
+        <div class="telemetry" id="log">> STANDING BY...</div>
     </div>
-</div>
+
+    <div class="hud-panel bottom-left">
+        <div style="font-size: 10px;">NEURAL_SIGNAL_INTENSITY</div>
+        <canvas id="graph"></canvas>
+        <div style="font-size: 9px; margin-top: 5px; display: flex; justify-content: space-between;">
+            <span>MIN: 0.15</span><span>LOCK: <span id="lock">0%</span></span><span>MAX: 0.45</span>
+        </div>
+    </div>
 
 <script>
     const logEl = document.getElementById('log');
@@ -54,11 +47,10 @@
     const gCtx = graphCanvas.getContext('2d');
     
     let serialWriter = null;
-    let lastSent = 0;
     let lastCmd = "";
     let signalData = Array(50).fill(0);
 
-    // 1. Voice Integration
+    // 1. J.A.R.V.I.S. Voice and Logs
     function jarvis(text) {
         const msg = new SpeechSynthesisUtterance(text);
         msg.rate = 1.0; msg.pitch = 0.85;
@@ -66,11 +58,11 @@
         logEl.innerHTML = `> ${text.toUpperCase()}<br>` + logEl.innerHTML;
     }
 
-    // 2. Wave Graph Logic
+    // 2. ProArm-Style Signal Graph
     function updateGraph(value) {
         signalData.push(value); signalData.shift();
         gCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
-        gCtx.strokeStyle = "#00f2ff"; gCtx.beginPath();
+        gCtx.strokeStyle = "#00f2ff"; gCtx.lineWidth = 2; gCtx.beginPath();
         for(let i=0; i<signalData.length; i++) {
             const x = (i / signalData.length) * graphCanvas.width;
             const y = graphCanvas.height - (signalData[i] * graphCanvas.height);
@@ -79,12 +71,11 @@
         gCtx.stroke();
     }
 
-    // 3. 3D Digital Twin (Mesh Fix)
+    // 3. 3D High-Density Mesh Alignment
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setClearColor(0x000000, 0); 
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0); renderer.setSize(window.innerWidth, window.innerHeight);
     document.getElementById('viewport').appendChild(renderer.domElement);
 
     const joints = [];
@@ -95,7 +86,7 @@
     }
     camera.position.z = 2;
 
-    // 4. Web Serial Link
+    // 4. Web Serial Connection
     document.getElementById('connectBtn').onclick = async () => {
         try {
             const port = await navigator.serial.requestPort();
@@ -106,14 +97,14 @@
         } catch (e) { jarvis("Port 1420 busy or not found."); }
     };
 
-    // 5. Tracking & Mapping (ProArm Speed Logic)
+    // 5. Optimized ProArm Tracking & 3-State Logic
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8 });
 
     hands.onResults((results) => {
         if (results.multiHandLandmarks) {
             for (const landmarks of results.multiHandLandmarks) {
-                // THE FIX: Centered scaling to align mesh with camera hand
+                // Proper scaling to lay mesh on your hand
                 landmarks.forEach((p, i) => {
                     joints[i].position.set((p.x - 0.5) * -3, (p.y - 0.5) * -3, p.z * 5);
                 });
@@ -122,13 +113,13 @@
                 const tips = [4, 8, 12, 16, 20];
                 const dists = tips.map(t => Math.sqrt(Math.pow(landmarks[t].x-wrist.x,2)+Math.pow(landmarks[t].y-wrist.y,2)));
                 
-                // Telemetry Calculation
+                // Signal Intensity Graph
                 const avg = dists.reduce((a,b)=>a+b, 0) / 5;
                 const norm = Math.min(Math.max((avg - 0.15) / 0.3, 0), 1);
                 updateGraph(norm);
                 document.getElementById('lock').innerText = (norm * 100).toFixed(0) + "%";
 
-                // Optimized 3-State Command Logic (A=Open, B=Close, C=Middle)
+                // 3-State Command Logic (A=Open, B=Close, C=Middle)
                 const allClosed = dists.every(d => d < 0.22);
                 const allOpen = dists.every(d => d > 0.38);
                 const middleOnly = dists[2] > 0.38 && dists[0] < 0.22 && dists[1] < 0.22;
@@ -138,10 +129,11 @@
                 else if (allClosed) cmd = 'B';
                 else if (allOpen) cmd = 'A';
 
+                // ONLY send when the state changes to prevent lag
                 if (cmd !== "" && cmd !== lastCmd && serialWriter) {
                     serialWriter.write(new TextEncoder().encode(cmd));
                     lastCmd = cmd;
-                    console.log("Sent Command:", cmd);
+                    console.log("Sent:", cmd);
                 }
             }
         }
