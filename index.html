@@ -2,30 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MARK_VII // NEURAL LINK OS</title>
+    <title>MARK_VII NEURAL LINK OS</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        :root { --glow: #00f2ff; --warn: #ff0055; --bg: rgba(0, 15, 25, 0.85); }
+        :root { --glow: #00f2ff; --bg: rgba(0, 15, 25, 0.8); --warn: #ff0055; }
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
-        
         #input_video { position: absolute; width: 100vw; height: 100vh; object-fit: cover; z-index: 1; transform: scaleX(-1); }
         #viewport { position: absolute; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
-
         .hud-panel { position: absolute; background: var(--bg); border-left: 5px solid var(--glow); padding: 15px; color: var(--glow); backdrop-filter: blur(10px); z-index: 100; pointer-events: auto; }
         .top-left { top: 30px; left: 30px; width: 280px; }
-        .bottom-left { bottom: 30px; left: 30px; width: 300px; height: 130px; border-left: 2px solid var(--glow); }
-
-        canvas#graph { width: 100%; height: 60px; margin-top: 10px; background: rgba(0, 242, 255, 0.05); }
-        
-        button { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow); padding: 10px; cursor: pointer; width: 100%; text-transform: uppercase; font-family: 'Orbitron'; margin-top: 8px; transition: 0.3s; }
-        button:hover { background: var(--glow); color: #000; box-shadow: 0 0 15px var(--glow); }
+        button { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow); padding: 10px; cursor: pointer; width: 100%; text-transform: uppercase; font-family: 'Orbitron'; margin-top: 5px; transition: 0.3s; }
+        button:hover { background: var(--glow); color: #000; }
         .relax-btn { border-color: var(--warn); color: var(--warn); }
-        .relax-btn:hover { background: var(--warn); color: #fff; box-shadow: 0 0 15px var(--warn); }
-        
-        .log-stream { font-size: 9px; height: 50px; overflow: hidden; margin-top: 10px; border-top: 1px solid rgba(0,242,255,0.2); padding-top: 5px; opacity: 0.8; }
+        .telemetry { font-size: 9px; margin-top: 10px; border-top: 1px solid rgba(0,242,255,0.2); padding-top: 5px; opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -37,45 +29,16 @@
     <div style="font-size: 18px; font-weight: bold; letter-spacing: 2px;">NEURAL_LINK_V7</div>
     <button id="connectBtn">INITIALIZE PORT</button>
     <button id="relaxBtn" class="relax-btn">RELAX SERVOS</button>
-    <div class="log-stream" id="log">> SYSTEM STANDING BY...</div>
-</div>
-
-<div class="hud-panel bottom-left">
-    <div style="font-size: 10px;">NEURAL_SIGNAL_INTENSITY</div>
-    <canvas id="graph"></canvas>
-    <div style="font-size: 9px; margin-top: 5px; display: flex; justify-content: space-between;">
-        <span>MIN: 0.05</span><span>LOCK: <span id="lock">0%</span></span><span>MAX: 0.15</span>
-    </div>
+    <div class="telemetry" id="log">> STANDING BY...</div>
 </div>
 
 <script>
     const logEl = document.getElementById('log');
-    const graphCanvas = document.getElementById('graph');
-    const gCtx = graphCanvas.getContext('2d');
     let serialWriter = null;
     let lastSent = 0;
-    let lastCmd = "";
-    let signalData = Array(50).fill(0);
+    let lastFingerStates = {};
 
-    function jarvis(text) {
-        const msg = new SpeechSynthesisUtterance(text);
-        msg.rate = 1.0; msg.pitch = 0.85;
-        window.speechSynthesis.speak(msg);
-        logEl.innerHTML = `> ${text.toUpperCase()}<br>` + logEl.innerHTML;
-    }
-
-    function updateGraph(value) {
-        signalData.push(value); signalData.shift();
-        gCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
-        gCtx.strokeStyle = "#00f2ff"; gCtx.lineWidth = 2; gCtx.beginPath();
-        for(let i=0; i<signalData.length; i++) {
-            const x = (i / signalData.length) * graphCanvas.width;
-            const y = graphCanvas.height - (signalData[i] * graphCanvas.height);
-            if(i===0) gCtx.moveTo(x, y); else gCtx.lineTo(x, y);
-        }
-        gCtx.stroke();
-    }
-
+    // --- 3D SURFACE MESH SETUP ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -83,60 +46,88 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.getElementById('viewport').appendChild(renderer.domElement);
 
-    const joints = [];
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00f2ff, wireframe: true });
-    for (let i = 0; i < 21; i++) {
-        const s = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 8), mat);
-        joints.push(s); scene.add(s);
-    }
+    // Index mapping for a triangulated surface mesh
+    const indices = [
+        0,1,5, 1,2,5, 2,3,5, 3,4,5, // Thumb/Palm base
+        5,6,9, 6,7,9, 7,8,9,        // Index base
+        9,10,13, 10,11,13, 11,12,13, // Middle base
+        13,14,17, 14,15,17, 15,16,17, // Ring base
+        17,18,0, 18,19,0, 19,20,0     // Pinky base
+    ];
+
+    const geometry = new THREE.BufferGeometry();
+    const vertices = new Float32Array(21 * 3);
+    geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+
+    const material = new THREE.MeshBasicMaterial({ 
+        color: 0x00f2ff, 
+        wireframe: true, 
+        transparent: true, 
+        opacity: 0.5 
+    });
+    const handMesh = new THREE.Mesh(geometry, material);
+    scene.add(handMesh);
     camera.position.z = 2;
 
+    // --- SERIAL ---
     document.getElementById('connectBtn').onclick = async () => {
         const port = await navigator.serial.requestPort();
         await port.open({ baudRate: 115200 });
         serialWriter = port.writable.getWriter();
-        jarvis("Neural link established.");
+        logEl.innerHTML = "> NEURAL LINK ACTIVE<br>" + logEl.innerHTML;
     };
+    document.getElementById('relaxBtn').onclick = () => sendRaw('R');
 
-    document.getElementById('relaxBtn').onclick = () => sendCommand('R');
+    async function sendRaw(cmd) {
+        if (serialWriter) await serialWriter.write(new TextEncoder().encode(cmd));
+    }
 
-    async function sendCommand(cmd) {
-        if (!serialWriter || cmd === lastCmd) return;
-        const now = Date.now();
-        if (now - lastSent > 100) { // ProArm Throttling logic
-            await serialWriter.write(new TextEncoder().encode(cmd));
-            lastCmd = cmd;
-            lastSent = now;
-            logEl.innerHTML = `> SENT: ${cmd}<br>` + logEl.innerHTML;
+    async function sendIndividualFinger(chan, pulse) {
+        if (serialWriter && lastFingerStates[chan] !== pulse) {
+            const now = Date.now();
+            if (now - lastSent > 45) { // Throttled to prevent Arduino crashing
+                const cmd = `C${chan},${pulse}`;
+                await serialWriter.write(new TextEncoder().encode(cmd));
+                lastFingerStates[chan] = pulse;
+                lastSent = now;
+            }
         }
     }
 
+    // --- TRACKING ---
     const hands = new Hands({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8 });
 
     hands.onResults((results) => {
         if (results.multiHandLandmarks) {
             for (const landmarks of results.multiHandLandmarks) {
+                // Update Mesh Vertices
+                const positions = geometry.attributes.position.array;
                 landmarks.forEach((p, i) => {
-                    joints[i].position.set((p.x - 0.5) * -3, (p.y - 0.5) * -3, p.z * 5);
+                    // Mirrored and scaled alignment
+                    const x = (p.x - 0.5) * -3;
+                    const y = (p.y - 0.5) * -3;
+                    const z = p.z * 5;
+                    positions[i * 3] = x;
+                    positions[i * 3 + 1] = y;
+                    positions[i * 3 + 2] = z;
                 });
+                geometry.attributes.position.needsUpdate = true;
 
-                const thumb = landmarks[4];
-                const index = landmarks[8];
+                // FINGER CONTROL
                 const wrist = landmarks[0];
-                const middle = landmarks[12];
-
-                const pinch = Math.sqrt(Math.pow(thumb.x - index.x, 2) + Math.pow(thumb.y - index.y, 2));
-                const extension = Math.sqrt(Math.pow(middle.x - wrist.x, 2) + Math.pow(middle.y - wrist.y, 2));
+                const fingerTips = [16, 20, 4, 12, 8]; // Ring, Pinky, Thumb, Middle, Index
                 
-                // Signal Intensity Logic
-                const rawSignal = 1 - (pinch * 6);
-                updateGraph(Math.max(0, rawSignal));
-                document.getElementById('lock').innerText = (Math.max(0, rawSignal) * 100).toFixed(0) + "%";
+                fingerTips.forEach((tipIdx, i) => {
+                    const tip = landmarks[tipIdx];
+                    const dist = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
+                    
+                    let pulse = 450; // Open
+                    if (dist < 0.22) pulse = 60; // Close
 
-                if (extension > 0.4 && pinch < 0.1) sendCommand("C");
-                else if (pinch < 0.05) sendCommand("B"); // Grab
-                else if (pinch > 0.12) sendCommand("A"); // Release
+                    sendIndividualFinger(i + 2, pulse);
+                });
             }
         }
         renderer.render(scene, camera);
