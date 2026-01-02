@@ -1,46 +1,35 @@
-let lastCmds = [0,0,0,0,0]; // Cache last sent pulses
-let lastSentTime = 0;
-
-function processFingers(landmarks) {
-    const wrist = landmarks[0];
-    const tips = [16, 20, 4, 12, 8]; // Ring, Pinky, Thumb, Middle, Index
-    const chans = [2, 3, 4, 5, 6];
+hands.onResults((results) => {
+    // Clear and draw the background video frame first
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
     
-    // 1. Calculate Distances
-    const distances = tips.map(idx => {
-        return Math.sqrt(
-            Math.pow(landmarks[idx].x - wrist.x, 2) + 
-            Math.pow(landmarks[idx].y - wrist.y, 2)
-        );
-    });
+    if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+            // THE FIX: Proper Coordinate Alignment
+            landmarks.forEach((p, i) => {
+                // Map 0->1 to -Range->+Range based on aspect ratio
+                const x = (p.x - 0.5) * -2 * (window.innerWidth / window.innerHeight);
+                const y = (p.y - 0.5) * -2;
+                const z = p.z * -2; // Depth scaling
 
-    // 2. State Detection Logic
-    const isFist = distances.every(d => d < 0.18);
-    const isOpen = distances.every(d => d > 0.35);
+                points[i].position.set(x, y, z);
+                
+                // Add glowing "Data Lines" between joints for the Cyberpunk look
+                updateMeshConnections(landmarks);
+            });
 
-    if (isFist) {
-        sendGlobalCommand('B'); // Force Full Close
-    } else if (isOpen) {
-        sendGlobalCommand('A'); // Force Full Open
-    } else {
-        // 3. Individual Finger Logic
-        distances.forEach((d, i) => {
-            let targetPulse = (chans[i] === 5) ? 590 : 450; // Open
-            if (d < 0.22) targetPulse = 60; // Individual Close
-            
-            sendThrottled(chans[i], targetPulse);
-        });
-    }
-}
+            // LOG TELEMETRY (Interesting HUD Data)
+            const wrist = landmarks[0];
+            document.getElementById('log').innerHTML = `
+                X: ${wrist.x.toFixed(2)} | Y: ${wrist.y.toFixed(2)}<br>
+                Z-DEPTH: ${Math.abs(wrist.z * 100).toFixed(0)}cm<br>
+                ACTIVE_SERVOS: ${serialWriter ? '5/5' : '0/5'}
+            `;
 
-async function sendThrottled(chan, pulse) {
-    const now = Date.now();
-    // Only send if pulse changed AND we haven't sent in 50ms
-    if (pulse !== lastCmds[chan-2] && now - lastSentTime > 50) {
-        if (serialWriter) {
-            await serialWriter.write(new TextEncoder().encode(`C${chan},${pulse}`));
-            lastCmds[chan-2] = pulse;
-            lastSentTime = now;
+            // Process Robotic Arm logic...
+            processFingers(landmarks);
         }
     }
-}
+    renderer.render(scene, camera);
+    canvasCtx.restore();
+});
