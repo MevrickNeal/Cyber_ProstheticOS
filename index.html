@@ -1,43 +1,134 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>MARK_VII NEURAL LINK</title>
+    <meta charset="UTF-8">
+    <title>MARK_VII NEURAL LINK OS</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+
     <style>
+        :root { --glow: #00f2ff; --warn: #ff0055; }
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
         
-        /* THE FIX: Absolute positioning layers */
+        /* FIX: Video must be behind (z-index 1) and Canvas in front (z-index 2) */
         #input_video { 
             position: absolute; width: 100vw; height: 100vh; 
             object-fit: cover; z-index: 1; transform: scaleX(-1); 
         }
-        #viewport { position: absolute; width: 100vw; height: 100vh; z-index: 2; }
-        
+        #viewport { position: absolute; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
+
         #hud {
             position: absolute; top: 30px; left: 30px; z-index: 100;
-            background: rgba(0, 15, 25, 0.7); border-left: 5px solid #00f2ff;
-            padding: 20px; color: #00f2ff; backdrop-filter: blur(10px);
-            pointer-events: auto;
+            background: rgba(0, 15, 25, 0.8); border-left: 5px solid var(--glow);
+            padding: 25px; color: var(--glow); backdrop-filter: blur(10px);
         }
 
-        .log-stream { font-size: 9px; margin-top: 15px; height: 100px; overflow: hidden; color: #00f2ff; opacity: 0.8; }
-        .glitch { animation: glitch 1s infinite; }
-        @keyframes glitch { 0% { opacity: 1; } 50% { opacity: 0.8; } 100% { opacity: 1; } }
+        button {
+            background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow);
+            padding: 12px; cursor: pointer; width: 100%; text-transform: uppercase;
+            letter-spacing: 2px; transition: 0.3s; pointer-events: auto;
+        }
+
+        .telemetry { font-size: 9px; margin-top: 15px; height: 60px; overflow: hidden; opacity: 0.8; }
     </style>
 </head>
 <body>
-    <video id="input_video"></video>
-    <div id="viewport"></div>
 
-    <div id="hud">
-        <div class="glitch" style="font-size: 18px; font-weight: bold;">LINK_STATUS: <span id="status">OFFLINE</span></div>
-        <button id="connectBtn" style="background:none; border:1px solid #00f2ff; color:#00f2ff; cursor:pointer; margin-top:10px; width:100%;">INITIATE LINK</button>
-        <div class="log-stream" id="logs">> STANDING BY FOR PROTOCOL...</div>
-    </div>
+<video id="input_video" autoplay playsinline></video>
+<div id="viewport"></div>
 
-    <script type="module" src="app.js"></script>
+<div id="hud">
+    <div style="font-size: 20px; font-weight: bold;">LINK_STATUS: <span id="sync">OFFLINE</span></div>
+    <div id="mode" style="font-size: 10px; margin-bottom: 15px;">MODE: SURVEILLANCE</div>
+    <button id="connectBtn">INITIALIZE NEURAL LINK</button>
+    <div class="telemetry" id="log">> STANDING BY...</div>
+</div>
+
+<script>
+    const logEl = document.getElementById('log');
+    const syncEl = document.getElementById('sync');
+    let serialWriter = null;
+    let lastSent = 0;
+
+    // --- JARVIS VOICE ---
+    function jarvis(text) {
+        const msg = new SpeechSynthesisUtterance(text);
+        msg.rate = 1.0; msg.pitch = 0.85;
+        window.speechSynthesis.speak(msg);
+        logEl.innerHTML = `> ${text.toUpperCase()}<br>` + logEl.innerHTML;
+    }
+
+    // --- THREE.JS HOLOGRAPHIC MESH ---
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // ALPHA MUST BE TRUE FOR TRANSPARENCY
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0); 
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.getElementById('viewport').appendChild(renderer.domElement);
+
+    const points = [];
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00f2ff });
+
+    for (let i = 0; i < 21; i++) {
+        const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), mat);
+        points.push(sphere);
+        scene.add(sphere);
+    }
+    camera.position.z = 2;
+
+    // --- WEB SERIAL ---
+    document.getElementById('connectBtn').onclick = async () => {
+        try {
+            const port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 115200 });
+            serialWriter = port.writable.getWriter();
+            syncEl.innerText = "ONLINE";
+            jarvis("Neural link established. Systems nominal.");
+        } catch (e) {
+            jarvis("Connection failed. Secure port 1420.");
+        }
+    };
+
+    // --- HAND TRACKING ---
+    const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+    hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8 });
+
+    hands.onResults((results) => {
+        if (results.multiHandLandmarks) {
+            for (const landmarks of results.multiHandLandmarks) {
+                landmarks.forEach((p, i) => {
+                    points[i].position.set((p.x - 0.5) * -3, (p.y - 0.5) * -3, p.z * 5);
+                });
+
+                const wrist = landmarks[0];
+                const tips = [16, 20, 4, 12, 8]; // Ring, Pinky, Thumb, Middle, Index
+                const chans = [2, 3, 4, 5, 6];
+
+                tips.forEach((tipIdx, i) => {
+                    const tip = landmarks[tipIdx];
+                    const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
+                    let pulse = (chans[i] === 5) ? 590 : 450;
+                    if (d < 0.24) pulse = 60;
+
+                    if (serialWriter && Date.now() - lastSent > 45) {
+                        serialWriter.write(new TextEncoder().encode(`C${chans[i]},${pulse}`));
+                        lastSent = Date.now();
+                    }
+                });
+            }
+        }
+        renderer.render(scene, camera);
+    });
+
+    const videoElement = document.getElementById('input_video');
+    const cameraHandler = new Camera(videoElement, {
+        onFrame: async () => { await hands.send({image: videoElement}); },
+        width: 1280, height: 720
+    });
+    cameraHandler.start();
+</script>
 </body>
 </html>
