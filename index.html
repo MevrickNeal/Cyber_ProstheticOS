@@ -2,36 +2,34 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>MARK_VII NEURAL LINK OS</title>
+    <title>MARK_VII  NEURAL LINK OS</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
-        :root { --glow: #00f2ff; --warn: #ff0055; }
+        :root { --glow: #00f2ff; --warn: #ff0055; --bg-glass: rgba(0, 15, 25, 0.7); }
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
         
-        /* FIX: Video must be behind (z-index 1) and Canvas in front (z-index 2) */
-        #input_video { 
-            position: absolute; width: 100vw; height: 100vh; 
-            object-fit: cover; z-index: 1; transform: scaleX(-1); 
-        }
+        /* Transparent Video & Canvas Layers */
+        #input_video { position: absolute; width: 100vw; height: 100vh; object-fit: cover; z-index: 1; transform: scaleX(-1); }
         #viewport { position: absolute; width: 100vw; height: 100vh; z-index: 2; pointer-events: none; }
 
-        #hud {
-            position: absolute; top: 30px; left: 30px; z-index: 100;
-            background: rgba(0, 15, 25, 0.8); border-left: 5px solid var(--glow);
-            padding: 25px; color: var(--glow); backdrop-filter: blur(10px);
-        }
+        /* Cyberpunk HUD Layout */
+        #hud-container { position: absolute; width: 100%; height: 100%; z-index: 100; pointer-events: none; }
+        .hud-panel { position: absolute; background: var(--bg-glass); border: 1px solid var(--glow); backdrop-filter: blur(8px); padding: 15px; color: var(--glow); pointer-events: auto; }
+        
+        .top-left { top: 30px; left: 30px; border-left: 5px solid var(--glow); width: 300px; }
+        .bottom-right { bottom: 30px; right: 30px; border-right: 5px solid var(--glow); width: 250px; }
 
-        button {
-            background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow);
-            padding: 12px; cursor: pointer; width: 100%; text-transform: uppercase;
-            letter-spacing: 2px; transition: 0.3s; pointer-events: auto;
-        }
+        button { background: rgba(0, 242, 255, 0.1); border: 1px solid var(--glow); color: var(--glow); padding: 10px; cursor: pointer; width: 100%; text-transform: uppercase; letter-spacing: 2px; transition: 0.3s; margin-top: 10px; font-family: 'Orbitron'; }
+        button:hover { background: var(--glow); color: #000; box-shadow: 0 0 15px var(--glow); }
 
-        .telemetry { font-size: 9px; margin-top: 15px; height: 60px; overflow: hidden; opacity: 0.8; }
+        .telemetry-log { font-size: 10px; margin-top: 10px; height: 80px; overflow-y: hidden; line-height: 1.4; border-top: 1px solid rgba(0, 242, 255, 0.2); padding-top: 8px; }
+        .servo-label { font-size: 9px; margin-top: 5px; opacity: 0.8; }
+        .bar-container { height: 4px; background: rgba(0, 242, 255, 0.1); margin-top: 2px; }
+        .bar-fill { height: 100%; background: var(--glow); transition: width 0.1s; }
     </style>
 </head>
 <body>
@@ -39,20 +37,30 @@
 <video id="input_video" autoplay playsinline></video>
 <div id="viewport"></div>
 
-<div id="hud">
-    <div style="font-size: 20px; font-weight: bold;">LINK_STATUS: <span id="sync">OFFLINE</span></div>
-    <div id="mode" style="font-size: 10px; margin-bottom: 15px;">MODE: SURVEILLANCE</div>
-    <button id="connectBtn">INITIALIZE NEURAL LINK</button>
-    <div class="telemetry" id="log">> STANDING BY...</div>
+<div id="hud-container">
+    <div class="hud-panel top-left">
+        <div style="font-size: 18px; font-weight: bold;">MARK_VII // SYSTEM</div>
+        <div style="font-size: 10px; margin-bottom: 10px;">CORE_TEMPERATURE: <span id="temp">36.5°C</span></div>
+        <button id="connectBtn">INITIALIZE NEURAL LINK</button>
+        <div class="telemetry-log" id="log">> STANDING BY FOR HAND DETECT...</div>
+    </div>
+
+    <div class="hud-panel bottom-right">
+        <div style="font-size: 12px; margin-bottom: 10px; border-bottom: 1px solid var(--glow);">SERVO_TELEMETRY</div>
+        <div class="servo-label">THUMB / CH4</div> <div class="bar-container"><div id="bar-4" class="bar-fill" style="width:100%"></div></div>
+        <div class="servo-label">INDEX / CH6</div> <div class="bar-container"><div id="bar-6" class="bar-fill" style="width:100%"></div></div>
+        <div class="servo-label">MIDDLE / CH5</div> <div class="bar-container"><div id="bar-5" class="bar-fill" style="width:100%"></div></div>
+        <div class="servo-label">RING / CH2</div> <div class="bar-container"><div id="bar-2" class="bar-fill" style="width:100%"></div></div>
+        <div class="servo-label">PINKY / CH3</div> <div class="bar-container"><div id="bar-3" class="bar-fill" style="width:100%"></div></div>
+    </div>
 </div>
 
 <script>
     const logEl = document.getElementById('log');
-    const syncEl = document.getElementById('sync');
     let serialWriter = null;
     let lastSent = 0;
 
-    // --- JARVIS VOICE ---
+    // --- 1. J.A.R.V.I.S. VOICE ---
     function jarvis(text) {
         const msg = new SpeechSynthesisUtterance(text);
         msg.rate = 1.0; msg.pitch = 0.85;
@@ -60,39 +68,60 @@
         logEl.innerHTML = `> ${text.toUpperCase()}<br>` + logEl.innerHTML;
     }
 
-    // --- THREE.JS HOLOGRAPHIC MESH ---
+    // --- 2. THREE.JS MESH SETUP ---
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    // ALPHA MUST BE TRUE FOR TRANSPARENCY
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setClearColor(0x000000, 0); 
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.getElementById('viewport').appendChild(renderer.domElement);
 
-    const points = [];
-    const mat = new THREE.MeshBasicMaterial({ color: 0x00f2ff });
-
+    const joints = [];
+    const mat = new THREE.MeshBasicMaterial({ color: 0x00f2ff, transparent: true, opacity: 0.8 });
     for (let i = 0; i < 21; i++) {
-        const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), mat);
-        points.push(sphere);
+        const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), mat);
+        joints.push(sphere);
         scene.add(sphere);
     }
     camera.position.z = 2;
 
-    // --- WEB SERIAL ---
+    // --- 3. SERIAL CONNECTION ---
     document.getElementById('connectBtn').onclick = async () => {
         try {
             const port = await navigator.serial.requestPort();
             await port.open({ baudRate: 115200 });
             serialWriter = port.writable.getWriter();
-            syncEl.innerText = "ONLINE";
-            jarvis("Neural link established. Systems nominal.");
-        } catch (e) {
-            jarvis("Connection failed. Secure port 1420.");
-        }
+            jarvis("Neural link established. All systems online.");
+        } catch (e) { jarvis("Link failure. Port not found."); }
     };
 
-    // --- HAND TRACKING ---
+    // --- 4. TELEMETRY & GESTURE LOGIC ---
+    function updateTelemetry(chan, pulse) {
+        const percentage = ((pulse - 60) / (450 - 60)) * 100;
+        document.getElementById(`bar-${chan}`).style.width = Math.max(0, Math.min(100, percentage)) + "%";
+    }
+
+    function processGestures(landmarks) {
+        const wrist = landmarks[0];
+        const tips = [16, 20, 4, 12, 8]; // Ring, Pinky, Thumb, Middle, Index
+        const chans = [2, 3, 4, 5, 6];
+        
+        const distances = tips.map(idx => Math.sqrt(
+            Math.pow(landmarks[idx].x - wrist.x, 2) + Math.pow(landmarks[idx].y - wrist.y, 2)
+        ));
+
+        distances.forEach((d, i) => {
+            let pulse = (chans[i] === 5) ? 590 : 450;
+            if (d < 0.25) pulse = 60;
+            updateTelemetry(chans[i], pulse);
+            if (serialWriter && Date.now() - lastSent > 50) {
+                serialWriter.write(new TextEncoder().encode(`C${chans[i]},${pulse}`));
+                lastSent = Date.now();
+            }
+        });
+    }
+
+    // --- 5. TRACKING LOOP ---
     const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
     hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8 });
 
@@ -100,24 +129,9 @@
         if (results.multiHandLandmarks) {
             for (const landmarks of results.multiHandLandmarks) {
                 landmarks.forEach((p, i) => {
-                    points[i].position.set((p.x - 0.5) * -3, (p.y - 0.5) * -3, p.z * 5);
+                    joints[i].position.set((p.x - 0.5) * -3, (p.y - 0.5) * -3, p.z * 5);
                 });
-
-                const wrist = landmarks[0];
-                const tips = [16, 20, 4, 12, 8]; // Ring, Pinky, Thumb, Middle, Index
-                const chans = [2, 3, 4, 5, 6];
-
-                tips.forEach((tipIdx, i) => {
-                    const tip = landmarks[tipIdx];
-                    const d = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
-                    let pulse = (chans[i] === 5) ? 590 : 450;
-                    if (d < 0.24) pulse = 60;
-
-                    if (serialWriter && Date.now() - lastSent > 45) {
-                        serialWriter.write(new TextEncoder().encode(`C${chans[i]},${pulse}`));
-                        lastSent = Date.now();
-                    }
-                });
+                processGestures(landmarks);
             }
         }
         renderer.render(scene, camera);
@@ -129,22 +143,6 @@
         width: 1280, height: 720
     });
     cameraHandler.start();
-
 </script>
-    // Inside your onResults loop
-const updateHUD = (landmarks) => {
-    const wrist = landmarks[0];
-    const logContainer = document.getElementById('log');
-    
-    // Rolling Telemetry
-    const dataString = `
-        <div style="color:#00f2ff">>> ORIENTATION_DATA</div>
-        WRIST_X: ${wrist.x.toFixed(4)}<br>
-        WRIST_Y: ${wrist.y.toFixed(4)}<br>
-        Z_DEPTH: ${Math.abs(wrist.z).toFixed(4)}<br>
-        <div style="color:#ff0055">>> SERVO_LOAD_NOMINAL</div>
-    `;
-    logContainer.innerHTML = dataString;
-};
 </body>
 </html>
