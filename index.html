@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MARK_VII // PROSTHETIC OS</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Orbitron', sans-serif; }
+        #hud-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; border: 2px solid rgba(0, 242, 255, 0.1); box-sizing: border-box; }
+        #controls {
+            position: absolute; top: 30px; left: 30px; z-index: 100;
+            background: rgba(0, 15, 25, 0.8); border-left: 5px solid #00f2ff;
+            padding: 25px; color: #00f2ff; pointer-events: auto;
+            backdrop-filter: blur(10px);
+        }
+        button {
+            background: rgba(0, 242, 255, 0.1); border: 1px solid #00f2ff; color: #00f2ff;
+            padding: 12px; cursor: pointer; width: 100%; text-transform: uppercase;
+            letter-spacing: 2px; transition: 0.3s;
+        }
+        button:hover { background: #00f2ff; color: #000; box-shadow: 0 0 20px #00f2ff; }
+        .log { font-size: 10px; margin-top: 15px; color: rgba(0, 242, 255, 0.6); height: 50px; overflow: hidden; }
+    </style>
+</head>
+<body>
+
+<div id="hud-container">
+    <div id="controls">
+        <div style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">SYSTEM_STATUS: <span id="sync-text">OFFLINE</span></div>
+        <div style="font-size: 10px; margin-bottom: 20px;">NEURAL_LINK_VERSION: 7.0.1</div>
+        <button id="connectBtn">INITIALIZE LINK</button>
+        <div class="log" id="jarvis-log">GREETINGS, SIR. STANDING BY.</div>
+    </div>
+</div>
+
+<div id="3d-viewport"></div>
+<video id="video" style="display:none"></video>
+
+<script>
+let serialWriter = null;
+let lastSent = 0;
+const logElement = document.getElementById('jarvis-log');
+
+// --- JARVIS VOICE ENGINE ---
+function jarvisSpeak(text) {
+    const msg = new SpeechSynthesisUtterance(text);
+    msg.rate = 1.1; // Slightly faster for that AI feel
+    msg.pitch = 0.9; // Lower pitch for authority
+    window.speechSynthesis.speak(msg);
+    logElement.innerHTML = `> ${text.toUpperCase()}<br>` + logElement.innerHTML;
+}
+
+// --- THREE.JS HOLOGRAPHIC MESH ---
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById('3d-viewport').appendChild(renderer.domElement);
+
+const points = [];
+const group = new THREE.Group();
+const mat = new THREE.MeshBasicMaterial({ color: 0x00f2ff, wireframe: true });
+
+for (let i = 0; i < 21; i++) {
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), mat);
+    points.push(sphere);
+    group.add(sphere);
+}
+scene.add(group);
+camera.position.z = 2;
+
+// --- SERIAL CONNECTION ---
+document.getElementById('connectBtn').onclick = async () => {
+    try {
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        serialWriter = port.writable.getWriter();
+        document.getElementById('sync-text').innerText = "ONLINE";
+        jarvisSpeak("Neural link established. All systems online.");
+    } catch (e) {
+        jarvisSpeak("Connection failed. Check hardware interface.");
+    }
+};
+
+// --- MEDIAPIPE HAND TRACKING ---
+const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8 });
+
+hands.onResults((results) => {
+    if (results.multiHandLandmarks) {
+        for (const landmarks of results.multiHandLandmarks) {
+            landmarks.forEach((p, i) => {
+                points[i].position.set((p.x - 0.5) * 3, (p.y - 0.5) * -3, p.z * 5);
+            });
+
+            // Independent Finger Control Logic
+            const wrist = landmarks[0];
+            const fingerTips = [16, 20, 4, 12, 8]; // Ring, Pinky, Thumb, Middle, Index
+            const chans = [2, 3, 4, 5, 6];
+
+            fingerTips.forEach((tipIdx, i) => {
+                const tip = landmarks[tipIdx];
+                const dist = Math.sqrt(Math.pow(tip.x - wrist.x, 2) + Math.pow(tip.y - wrist.y, 2));
+                
+                let pulse = (chans[i] === 5) ? 590 : 450; // Open
+                if (dist < 0.25) pulse = 60; // Close
+
+                if (serialWriter && Date.now() - lastSent > 50) {
+                    serialWriter.write(new TextEncoder().encode(`C${chans[i]},${pulse}`));
+                    lastSent = Date.now();
+                }
+            });
+        }
+    }
+    renderer.render(scene, camera);
+});
+
+const videoElement = document.getElementById('video');
+const cameraHandler = new Camera(videoElement, {
+    onFrame: async () => { await hands.send({image: videoElement}); },
+    width: 1280, height: 720
+});
+cameraHandler.start();
+</script>
+</body>
+</html>
