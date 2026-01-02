@@ -129,6 +129,22 @@
         width: 1280, height: 720
     });
     cameraHandler.start();
+
 </script>
+    // Inside your onResults loop
+const updateHUD = (landmarks) => {
+    const wrist = landmarks[0];
+    const logContainer = document.getElementById('log');
+    
+    // Rolling Telemetry
+    const dataString = `
+        <div style="color:#00f2ff">>> ORIENTATION_DATA</div>
+        WRIST_X: ${wrist.x.toFixed(4)}<br>
+        WRIST_Y: ${wrist.y.toFixed(4)}<br>
+        Z_DEPTH: ${Math.abs(wrist.z).toFixed(4)}<br>
+        <div style="color:#ff0055">>> SERVO_LOAD_NOMINAL</div>
+    `;
+    logContainer.innerHTML = dataString;
+};
 </body>
 </html>
